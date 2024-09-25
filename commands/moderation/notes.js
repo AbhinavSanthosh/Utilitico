@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const Note = require('../../models/note'); // Import your MongoDB Note model
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -28,57 +28,33 @@ module.exports = {
             return interaction.reply({ content: 'You don’t have permission to manage notes.', ephemeral: true });
         }
 
-        // Fetch notes from MySQL
-        const query = 'SELECT * FROM notes WHERE userId = ? AND guildId = ?';
-        const values = [target.id, guildId];
+        // Fetch notes from MongoDB
+        const noteRecord = await Note.findOne({ userId: target.id, guildId });
 
-        const noteRecord = await new Promise((resolve, reject) => {
-            connection.query(query, values, (err, results) => {
-                if (err) {
-                    console.error('Error fetching notes:', err);
-                    return reject('An error occurred while fetching notes.');
-                }
-                resolve(results[0]); // Get the first record if it exists
-            });
-        });
-
-        if (!noteRecord || !noteRecord.notes) {
+        if (!noteRecord || noteRecord.notes.length === 0) {
             return interaction.reply({ content: `No notes found for **${target.tag}**.`, ephemeral: true });
         }
 
         if (subcommand === 'view') {
-            const notes = JSON.parse(noteRecord.notes || '[]'); // Assuming notes are stored as a JSON string
             const embed = new EmbedBuilder()
                 .setTitle(`Notes for ${target.tag}`)
-                .setDescription(notes.map((note, index) => `${index + 1}. ${note.content} (by ${note.author} at ${new Date(note.timestamp).toLocaleString()})`).join('\n') || 'No notes available.')
+                .setDescription(noteRecord.notes.map((note, index) => 
+                    `${index + 1}. ${note.content} (by ${note.author} at ${new Date(note.timestamp).toLocaleString()})`
+                ).join('\n') || 'No notes available.')
                 .setColor('#FF0000')
                 .setTimestamp();
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
         } else if (subcommand === 'remove') {
             const index = interaction.options.getInteger('index') - 1;
-            const notes = JSON.parse(noteRecord.notes || '[]');
 
-            if (index < 0 || index >= notes.length) {
+            if (index < 0 || index >= noteRecord.notes.length) {
                 return interaction.reply({ content: 'Invalid note index.', ephemeral: true });
             }
 
-            notes.splice(index, 1); // Remove the note
-            const updatedNotes = JSON.stringify(notes);
-
-            // Update the notes in MySQL
-            const updateQuery = 'UPDATE notes SET notes = ? WHERE userId = ? AND guildId = ?';
-            const updateValues = [updatedNotes, target.id, guildId];
-
-            await new Promise((resolve, reject) => {
-                connection.query(updateQuery, updateValues, (updateErr) => {
-                    if (updateErr) {
-                        console.error('Error updating notes:', updateErr);
-                        return reject('An error occurred while updating notes.');
-                    }
-                    resolve();
-                });
-            });
+            // Remove the note
+            noteRecord.notes.splice(index, 1);
+            await noteRecord.save(); // Save updated document in MongoDB
 
             await interaction.reply({ content: `Note removed successfully from **${target.tag}**.`, ephemeral: true });
         }

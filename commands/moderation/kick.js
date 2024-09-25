@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const History = require('../../models/history'); // Import the MongoDB model
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -16,22 +16,27 @@ module.exports = {
             // Attempt to kick the member
             try {
                 await member.kick();
-                
-                // Log the kick action in MySQL
-                const query = 'INSERT INTO history (userId, guildId, action, moderator, timestamp) VALUES (?, ?, ?, ?, ?)';
-                const values = [target.id, interaction.guild.id, 'kick', interaction.user.tag, new Date()];
 
-                connection.query(query, values, (err) => {
-                    if (err) {
-                        console.error('Error logging kick action to MySQL:', err);
-                    }
-                });
+                // Log the kick action in MongoDB
+                await History.findOneAndUpdate(
+                    { userId: target.id, guildId: interaction.guild.id },
+                    {
+                        $push: {
+                            actions: {
+                                action: 'kick',
+                                moderator: interaction.user.tag,
+                                timestamp: new Date(),
+                            },
+                        },
+                    },
+                    { upsert: true } // Creates a new record if no history exists for this user
+                );
 
                 // Create an embed for the kick confirmation
                 const embed = new EmbedBuilder()
                     .setTitle('User Kicked')
                     .setDescription(`${target.tag} has been kicked.`)
-                    .setColor('#FFA500') // Added '#' for color code
+                    .setColor('#FFA500')
                     .setTimestamp();
 
                 // Send the embed as a public message

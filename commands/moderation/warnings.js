@@ -19,6 +19,7 @@ module.exports = {
         try {
             const warningRecord = await Warning.findOne({ userId: target.id, guildId });
 
+            // Check if the user has any warnings
             if (!warningRecord || warningRecord.warnings.length === 0) {
                 return interaction.reply({ content: `No warnings found for **${target.tag}**.`, ephemeral: true });
             }
@@ -28,7 +29,7 @@ module.exports = {
                 .setTitle(`Warnings for ${target.tag}`)
                 .setDescription(warningRecord.warnings.map((warning, index) => 
                     `${index + 1}. ${warning.reason} (by ${warning.moderator} at ${new Date(warning.timestamp).toLocaleString()})`
-                ).join('\n'))
+                ).join('\n')) // Format each warning nicely
                 .setColor('#FFA500')
                 .setTimestamp();
 

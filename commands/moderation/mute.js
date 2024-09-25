@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const History = require('../../models/history'); // Import the MongoDB model
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -28,25 +28,20 @@ module.exports = {
         // Add the mute role to the member
         await member.roles.add(muteRole);
 
-        // Record mute history in MySQL
-        const query = 'INSERT INTO history (userId, guildId, action, moderator, timestamp) VALUES (?, ?, ?, ?, ?)';
-        const values = [
-            target.id,
-            guild.id,
-            `mute ${duration ? `for ${duration}` : 'indefinitely'}`,
-            interaction.user.tag,
-            new Date()
-        ];
-
-        await new Promise((resolve, reject) => {
-            connection.query(query, values, (err) => {
-                if (err) {
-                    console.error('Error saving mute history:', err);
-                    return reject('An error occurred while saving mute history.');
-                }
-                resolve();
-            });
-        });
+        // Record mute history in MongoDB
+        await History.findOneAndUpdate(
+            { userId: target.id, guildId: guild.id },
+            {
+                $push: {
+                    actions: {
+                        action: `mute ${duration ? `for ${duration}` : 'indefinitely'}`,
+                        moderator: interaction.user.tag,
+                        timestamp: new Date(),
+                    },
+                },
+            },
+            { upsert: true } // Creates a new document if one doesn't exist
+        );
 
         // Create an embed for the mute confirmation
         const embed = new EmbedBuilder()

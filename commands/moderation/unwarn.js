@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const Warning = require('../../models/warnings'); // The Warning model
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const Warning = require('../../models/warnings'); // MongoDB model for warnings
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,7 +10,7 @@ module.exports = {
 
     async execute(interaction) {
         const target = interaction.options.getUser('target');
-        const index = interaction.options.getInteger('index') - 1;
+        const index = interaction.options.getInteger('index') - 1; // Adjust index for zero-based array
         const guildId = interaction.guild.id;
 
         if (!interaction.member.permissions.has('MANAGE_MESSAGES')) {
@@ -33,19 +32,20 @@ module.exports = {
 
         await warningRecord.save();
 
-        // Log the unwarn action in MySQL (optional)
-        const query = 'INSERT INTO warning_logs (userId, guildId, action, warning) VALUES (?, ?, ?, ?)';
-        const values = [target.id, guildId, 'unwarn', JSON.stringify(removedWarning)];
-
-        await new Promise((resolve, reject) => {
-            connection.query(query, values, (err) => {
-                if (err) {
-                    console.error('Error logging unwarn action:', err);
-                    return reject('An error occurred while logging the unwarn action.');
-                }
-                resolve();
-            });
-        });
+        // Optionally log the unwarn action in a logging system (you could set up a separate MongoDB model for logs)
+        // This example logs directly into the warnings collection
+        const logEntry = {
+            userId: target.id,
+            guildId,
+            action: 'unwarn',
+            warning: removedWarning,
+            moderator: interaction.user.tag,
+            timestamp: new Date(),
+        };
+        await Warning.updateOne(
+            { userId: target.id, guildId },
+            { $push: { log: logEntry } } // Assuming you have a 'log' field in your Warning model to store logs
+        );
 
         // Create an embed for the unwarn notification
         const embed = new EmbedBuilder()

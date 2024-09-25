@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const History = require('../../models/history'); // Assuming you still want to log the unmute action
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const History = require('../../models/history'); // MongoDB model for history
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -31,24 +30,11 @@ module.exports = {
 
         // Log the action in MongoDB
         let history = await History.findOne({ userId: target.id, guildId: guild.id });
-        if (history) {
-            history.actions.push({ action: 'unmute', moderator: interaction.user.tag });
-            await history.save();
+        if (!history) {
+            history = new History({ userId: target.id, guildId: guild.id, actions: [] });
         }
-
-        // Log the action in MySQL (optional)
-        const query = 'INSERT INTO history (userId, guildId, actions) VALUES (?, ?, ?)';
-        const values = [target.id, guild.id, JSON.stringify([{ action: 'unmute', moderator: interaction.user.tag, timestamp: new Date() }])];
-
-        await new Promise((resolve, reject) => {
-            connection.query(query, values, (err) => {
-                if (err) {
-                    console.error('Error logging unmute action:', err);
-                    return reject('An error occurred while logging the unmute.');
-                }
-                resolve();
-            });
-        });
+        history.actions.push({ action: 'unmute', moderator: interaction.user.tag, timestamp: new Date() });
+        await history.save();
 
         // Create and send the embed
         const embed = new EmbedBuilder()

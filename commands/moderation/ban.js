@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const History = require('../../models/history'); // Import the Mongoose model
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -54,17 +54,24 @@ module.exports = {
             if (i.customId === 'ban_confirm') {
                 await member.ban({ reason });
 
-                // Log the ban in MySQL
-                const query = 'INSERT INTO history (userId, guildId, action, moderator, reason) VALUES (?, ?, ?, ?, ?)';
-                const values = [target.id, guild.id, 'ban', interactionOrMessage.user.tag, reason];
+                // Log the ban in MongoDB
+                const newAction = {
+                    action: 'ban',
+                    moderator: interactionOrMessage.user.tag,
+                    timestamp: Date.now(),
+                };
 
-                connection.query(query, values, (err, results) => {
-                    if (err) {
-                        console.error('Error logging ban in MySQL:', err);
-                    } else {
-                        console.log(`Ban logged for user: ${target.tag}`);
-                    }
-                });
+                try {
+                    await History.findOneAndUpdate(
+                        { userId: target.id, guildId: guild.id },
+                        { $push: { actions: newAction } },
+                        { upsert: true, new: true }
+                    );
+
+                    console.log(`Ban logged for user: ${target.tag}`);
+                } catch (err) {
+                    console.error('Error logging ban in MongoDB:', err);
+                }
 
                 await interactionOrMessage.followUp({ content: `**${target.tag}** has been banned for: ${reason}`, ephemeral: false });
             } else if (i.customId === 'ban_cancel') {

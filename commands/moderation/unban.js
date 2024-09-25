@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const connection = require('../../config/mysql'); // Import your MySQL connection
+const History = require('../../models/history'); // Import your History model
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -24,19 +24,23 @@ module.exports = {
             // Send the embed as a public message
             await interaction.reply({ embeds: [embed] });
 
-            // Log the unban in MySQL
-            const query = 'INSERT INTO history (userId, guildId, actions) VALUES (?, ?, ?)';
-            const values = [userId, interaction.guild.id, JSON.stringify([{ action: 'unban', moderator: interaction.user.tag, timestamp: new Date() }])];
+            // Log the unban in MongoDB
+            let history = await History.findOne({ userId, guildId: interaction.guild.id });
 
-            await new Promise((resolve, reject) => {
-                connection.query(query, values, (err) => {
-                    if (err) {
-                        console.error('Error logging unban action:', err);
-                        return reject('An error occurred while logging the unban.');
-                    }
-                    resolve();
+            if (!history) {
+                // Create a new history record if it doesn't exist
+                history = new History({
+                    userId,
+                    guildId: interaction.guild.id,
+                    actions: [{ action: 'unban', moderator: interaction.user.tag, timestamp: new Date() }]
                 });
-            });
+            } else {
+                // Update existing history record
+                history.actions.push({ action: 'unban', moderator: interaction.user.tag, timestamp: new Date() });
+            }
+
+            // Save the history record to MongoDB
+            await history.save();
 
         } catch (error) {
             console.error('Failed to unban user:', error); // Log the error for debugging
